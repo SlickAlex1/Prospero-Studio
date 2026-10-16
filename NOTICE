@@ -1,0 +1,35 @@
+Prospero Studio
+Copyright (C) 2026 SlickAlex (https://github.com/SlickAlex1)
+Licensed under the GNU General Public License, version 3 or (at your option) any later version.
+
+Third-party software used at run time (not included in this repository)
+-----------------------------------------------------------------------
+update_anyps5.py downloads these on the user's machine, from their authors'
+official repositories. They are run as separate programs (or read as data, e.g.
+setting names in the source and documentation) and are not distributed with or
+linked into this tool.
+
+AnyPS5 - https://github.com/boykopovar/AnyPS5
+  Author: boykopovar and contributors
+  License: GNU General Public License, version 2 only.
+  Downloaded: the source tree of the main branch (AnyPS5-main/);
+    tools/unwrap_self.py, tools/import_audit.py, tools/nid_names.py, tools/progress.py;
+    the release assets relinker-<version>.exe and prx-windows-<version>.zip.
+  Setting descriptions in anyps5_settings.py and docs/SETTINGS.md summarise the
+  AnyPS5 documentation (docs/user/USAGE.md, docs/user/INPUT_MAPPING.md).
+
+PS5-SELF-TO-ELF - https://github.com/julienlgy/PS5-SELF-TO-ELF
+  Author: julienlgy
+  License: none published at the time of writing (all rights reserved by the author).
+  Downloaded: self_to_elf.py from the latest commit of the default branch, into tools/.
+  Because no license grants redistribution, this repository never contains a copy of
+  it; each user fetches it directly from the author's repository.
+
+The AnyPS5 Windows libraries ship the MinGW-w64 runtime DLLs (libgcc_s_seh-1.dll,
+libstdc++-6.dll, libwinpthread-1.dll) under their own licenses.
+
+Trademarks
+----------
+PlayStation and PS5 are trademarks of Sony Interactive Entertainment Inc. This project is
+not affiliated with, endorsed by or sponsored by Sony, the AnyPS5 authors or the
+PS5-SELF-TO-ELF author. See DISCLAIMER.md.

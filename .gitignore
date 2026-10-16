@@ -1,0 +1,45 @@
+# Downloaded by update_anyps5.py from github.com/boykopovar/AnyPS5 (GPL-2.0, not redistributed here)
+/AnyPS5-main/
+/AnyPS5-main.old/
+/prx-windows*/
+/relinker*.exe
+/relinker-v*
+/tools/*.py
+/.update_*/
+
+# Optional user-supplied converter (not part of this project)
+/self_to_elf.py
+/tools/self_to_elf.py
+
+# Local state, caches and personal settings (contain local paths)
+/anyps5_update_state.json
+/anyps5_capabilities.json
+/anyps5_gui_settings.json
+
+# Logs and build output
+*.log
+last_build_output.txt
+update_output.txt
+*_AnyPS5/
+*_AnyPS5_backup_*/
+*_AnyPS5_setup.log
+.anyps5_work/
+
+# Game files never belong in this repository
+eboot.bin
+eboot.elf
+eboot.exe
+*.prx
+*.sprx
+*.pkg
+
+# Python / editors / OS
+__pycache__/
+*.py[cod]
+*.orig
+.venv/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

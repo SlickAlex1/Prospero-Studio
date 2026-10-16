@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Game does not run correctly (AnyPS5 runtime)
+    url: https://github.com/boykopovar/AnyPS5/issues
+    about: Crashes, freezes, graphics or audio problems after a successful build are AnyPS5 issues.
