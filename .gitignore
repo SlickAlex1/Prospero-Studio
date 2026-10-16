@@ -1,17 +1,17 @@
-# Downloaded by update_anyps5.py from github.com/boykopovar/AnyPS5 (GPL-2.0, not redistributed here)
+# Everything downloaded or written at run time: AnyPS5 relinker, libraries, source and tools
+# (GPL-2.0, from github.com/boykopovar/AnyPS5), self_to_elf.py (github.com/julienlgy/PS5-SELF-TO-ELF),
+# update state, capability cache and personal settings. Nothing here is redistributed.
+/runtime/
+
+# Same files where versions before the prospero/ + runtime/ layout kept them (moved on first start)
 /AnyPS5-main/
 /AnyPS5-main.old/
 /prx-windows*/
 /relinker*.exe
 /relinker-v*
-/tools/*.py
+/tools/
 /.update_*/
-
-# Optional user-supplied converter (not part of this project)
 /self_to_elf.py
-/tools/self_to_elf.py
-
-# Local state, caches and personal settings (contain local paths)
 /anyps5_update_state.json
 /anyps5_capabilities.json
 /anyps5_gui_settings.json

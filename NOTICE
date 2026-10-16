@@ -4,7 +4,7 @@ Licensed under the GNU General Public License, version 3 or (at your option) any
 
 Third-party software used at run time (not included in this repository)
 -----------------------------------------------------------------------
-update_anyps5.py downloads these on the user's machine, from their authors'
+prospero/update_anyps5.py downloads these into runtime/ on the user's machine, from their authors'
 official repositories. They are run as separate programs (or read as data, e.g.
 setting names in the source and documentation) and are not distributed with or
 linked into this tool.
@@ -12,16 +12,16 @@ linked into this tool.
 AnyPS5 - https://github.com/boykopovar/AnyPS5
   Author: boykopovar and contributors
   License: GNU General Public License, version 2 only.
-  Downloaded: the source tree of the main branch (AnyPS5-main/);
-    tools/unwrap_self.py, tools/import_audit.py, tools/nid_names.py, tools/progress.py;
+  Downloaded: the source tree of the main branch (runtime/AnyPS5-main/);
+    runtime/tools/unwrap_self.py, import_audit.py, nid_names.py, progress.py;
     the release assets relinker-<version>.exe and prx-windows-<version>.zip.
-  Setting descriptions in anyps5_settings.py and docs/SETTINGS.md summarise the
+  Setting descriptions in prospero/anyps5_settings.py and docs/SETTINGS.md summarise the
   AnyPS5 documentation (docs/user/USAGE.md, docs/user/INPUT_MAPPING.md).
 
 PS5-SELF-TO-ELF - https://github.com/julienlgy/PS5-SELF-TO-ELF
   Author: julienlgy
   License: none published at the time of writing (all rights reserved by the author).
-  Downloaded: self_to_elf.py from the latest commit of the default branch, into tools/.
+  Downloaded: self_to_elf.py from the latest commit of the default branch, into runtime/tools/.
   Because no license grants redistribution, this repository never contains a copy of
   it; each user fetches it directly from the author's repository.
 

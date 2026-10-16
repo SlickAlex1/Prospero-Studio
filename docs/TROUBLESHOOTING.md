@@ -5,7 +5,7 @@
 **Symptoms**
 - `relinker.exe cannot be opened (Permission denied); it may have been quarantined by antivirus`
 - The build log ends in the middle of a step, or the console closes during the build
-- `eboot.exe`, `anyps5_folder.py` or `tools\unwrap_self.py` disappear after a build
+- `eboot.exe`, the relinker or files in `runtime\` disappear after a build
 
 **Cause.** Some antivirus products, Bitdefender in particular, flag the official AnyPS5 `relinker.exe`
 with a generic detection (seen: `Trojan.GenericKD.*`). Their behaviour monitoring then treats the whole
@@ -16,15 +16,15 @@ and the generated `eboot.exe`.
 [AnyPS5 releases page](https://github.com/boykopovar/AnyPS5/releases):
 
 ```powershell
-Get-FileHash .\relinker-v0.1.2.exe
+Get-FileHash .\runtime\relinker-v0.1.2.exe
 ```
 
-`update_anyps5.py` already refuses downloads whose checksum does not match.
+The updater already refuses downloads whose checksum does not match.
 
 **Fix (Bitdefender).**
 1. *Protection -> Antivirus -> Settings -> Manage exceptions*: add the tool folder **and** the folder your
    game builds go to, with every scan type enabled, including **Advanced Threat Defense**.
-2. *Protection -> Quarantine*: restore the removed files, or run `python update_anyps5.py --force` and
+2. *Protection -> Quarantine*: restore the removed files, or click **Check for updates now** (or run `python prospero\update_anyps5.py --force`) and
    download this repository again.
 3. Restart Windows if a file stays locked ("Access is denied" even though it is listed).
 
@@ -39,7 +39,7 @@ of the tool.
 ## The console window closes immediately
 
 Start the tool by double-clicking `Prospero Studio.pyw` (the window shows everything in its *Log* tab), or run
-it from Command Prompt: `python anyps5_folder.py`. The build log is also saved as
+it from Command Prompt: `python prospero\anyps5_folder.py`. The build log is also saved as
 `<Game>_AnyPS5_setup.log` beside the build folder.
 
 If **`eboot.exe`** closes immediately, start it from a console (`play.bat` keeps the window open) and read

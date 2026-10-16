@@ -10,6 +10,28 @@ First public release, by [SlickAlex](https://github.com/SlickAlex1).
 - Controller & mouse tab shows AnyPS5's built-in keyboard/mouse layout (read from the AnyPS5 source) next
   to your own keys; **Set... / Add... / Default** assign keys by pressing them, warn when one key does two
   things, and point out buttons with no keyboard key by default (Square, L2).
+- Reports & tools tab:
+  - run analysis after every Play (frame rate from the window title; cause of a stop: unimplemented
+    function, no mesh shaders, param.json, memory, CPU features, driver crash, freeze ...);
+  - Game bring-up report in AnyPS5's discussion-template format, with existing-thread search;
+  - performance capture following AnyPS5's performance-issue protocol (`APS5_TRACE_SECONDS`,
+    `aps5-summary.jsonl`, `tools/trace_digest.py`);
+  - release pinning: install older AnyPS5 releases (`prospero/update_anyps5.py --install TAG`) and pick the release
+    a build uses.
+- Runtime setting for `APS5_THREAD_PRIORITY`.
+- Clear layout: the repository root holds only `Prospero Studio.pyw` and the docs; code is in `prospero/`,
+  downloads and settings in `runtime/` (files of earlier versions are moved there on first start).
+- App icon in the title bar and taskbar (own taskbar entry instead of Python's), and **Create desktop
+  shortcut** for desktop and Start menu shortcuts.
+- Menu bar (File, Tools, Help) and an About window with version, author, licence, credits and the
+  installed AnyPS5 release; a boot banner in the Log at start-up.
+- Command line / JSON API: `python prospero <command> --json` (info, settings, update, releases,
+  install-release, build, play, analyze, audit, report), documented in docs/CLI.md.
+- README rewritten: what it is / is not, screenshot, FAQ, clearer legal section.
+- Coloured Log tab: errors, warnings, success, steps, updater messages and progress lines are told apart.
+- Sharp on high-DPI displays: the window is DPI-aware (Windows no longer stretches a blurry 96-DPI
+  bitmap, which also smeared while scrolling), sizes scale with the display, and scrolling uses small
+  pixel steps that also suit touchpads and precision mice.
 - `update_anyps5.py`, run before every build, keeps everything current automatically:
   - AnyPS5 source and tools from the `main` branch;
   - the latest AnyPS5 release's relinker and Windows libraries as a matched, SHA-256-verified pair;

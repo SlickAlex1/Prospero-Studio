@@ -149,7 +149,9 @@ def find_file(roots: list[Path], filename: str) -> Path | None:
 
 
 def detect_tools(base: Path, args: argparse.Namespace) -> dict[str, Path]:
-    script_dir = Path(__file__).resolve().parent
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import paths
+    script_dir = paths.ensure()  # runtime/: relinker, libraries, AnyPS5 source and tools
     downloads = Path.home() / "Downloads"
     roots = [script_dir, base, downloads, Path.cwd()]
     repo_candidates = [args.repo] if args.repo else [

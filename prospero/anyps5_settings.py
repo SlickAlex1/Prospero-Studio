@@ -104,6 +104,12 @@ BUILD_SETTINGS = [
             "Relinker (deprecated)", deprecated=True,
             note="Deprecated upstream: makes games extremely unstable. Debugging only."),
     # Folder-tool behaviour (not relinker flags).
+    Setting("release", "AnyPS5 release", "choice", "latest", "latest",
+            "Which installed AnyPS5 release (relinker + libraries) builds the game. Install older releases on the "
+            "Reports & tools tab to check whether a game broke or got faster between releases; the result says "
+            "which release it was in bring-up and performance reports.", "Tool",
+            choices=(("latest", "latest installed"),),
+            note="Changing it requires a new Build."),
     Setting("--converter-kind", "SELF converter", "choice", "auto", "auto",
             "Turns the game's decrypted SELF/fSELF containers (eboot.bin, *.prx) into the plain ELF files the "
             "relinker needs. unwrap_self.py is AnyPS5's own converter (github.com/boykopovar/AnyPS5) and refuses "
@@ -192,6 +198,13 @@ RUNTIME_SETTINGS = [
             "reuse memory after waiting for GPU work and see it overwritten later.", "Compatibility",
             note="Try ON if a game freezes or shows corruption after menus/scene changes (Blue Prince). Costs "
                  "one write-back per pending image per frame."),
+    Setting("APS5_THREAD_PRIORITY", "Driver thread priority", "choice", "off", None,
+            "Raises AnyPS5's GPU driver queue workers and the video presenter above the game's threads: high = "
+            "THREAD_PRIORITY_HIGHEST, rt = THREAD_PRIORITY_TIME_CRITICAL on Windows. A refusal is reported as a "
+            "driver failure.", "Performance",
+            choices=(("off", "off (default)"), ("high", "high"), ("rt", "rt - time critical")),
+            note="Measured with Animal Well on a 4-core CPU: no measurable change (17.7 vs 18.1 FPS). May help when "
+                 "other programs compete for the CPU."),
     Setting("APS5_STORE_AT_LABEL", "Store GPU results before each label", "bool", False, False,
             "Writes pending GPU results back before each GPU label write, for titles that wait for a GPU label "
             "and then read results on the CPU.", "Compatibility",
@@ -465,9 +478,12 @@ def env_for(values: dict[str, object]) -> dict[str, str]:
     """Environment variables for a dict of runtime setting values (unset/off/empty are dropped)."""
     env: dict[str, str] = {}
     kinds = {s.key: s.kind for s in RUNTIME_SETTINGS}
+    defaults = {s.key: s.default for s in RUNTIME_SETTINGS}
     for name, value in values.items():
         if value in (None, "", False) or not name.startswith(("ANYPS5_", "APS5_", "VK_")):
             continue  # unset, or a tool option such as game_output (not an environment variable)
+        if kinds.get(name) == "choice" and value == defaults.get(name) and name == "APS5_THREAD_PRIORITY":
+            continue  # "off" is the default; leave the variable unset
         env[name] = "1" if (kinds.get(name) == "bool" or value is True) else str(value)
     return env
 
@@ -484,6 +500,79 @@ def input_ini(values: dict[str, object], bindings: str) -> str:
     if not lines and not binding_lines:
         return ""
     return "# Written by Prospero Studio\n" + "\n".join(lines + binding_lines) + "\n"
+
+
+def build_values(overrides: dict[str, object] | None = None) -> dict[str, object]:
+    """Recommended build settings with overrides applied (keys as in BUILD_SETTINGS)."""
+    values = {s.key: s.recommended for s in BUILD_SETTINGS}
+    for key, value in (overrides or {}).items():
+        values[key] = value
+    return values
+
+
+def build_arguments(game: str, values: dict[str, object], env: dict[str, str], output: str | None = None,
+                    data_dir: Path | None = None, launch: bool = False) -> list[str]:
+    """anyps5_folder.py arguments for these build settings and runtime environment."""
+    v = {**build_values(), **values}
+    args = [game] + ([] if launch else ["--no-launch"])
+    if output:
+        args += ["--output", output]
+    args.append("--to-intel" if v["--to-intel"] else "--no-to-intel")
+    args += ["--unused-filter", str(v["--unused-filter"] or "0")]
+    args += ["--converter-kind", str(v["--converter-kind"] or "auto")]
+    args += ["--game-output", str(values.get("game_output") or "file")]
+    if v["--rpath"]:
+        args += ["--rpath", str(v["--rpath"])]
+    for key in ("--windows-gui", "--windows-diagnostics", "--trace-imports", "--trap-sdk-syscall-stubs",
+                "--skip-syscall-check", "--skip-sce-module", "--lazy-binding", "--strict-audit", "--keep-work"):
+        if v[key]:
+            args.append(key)
+    if v["--windows-fixed-base"]:
+        args += ["--windows-fixed-base", str(v["--windows-fixed-base"])]
+    for item in v["--executable"] or []:
+        args += ["--executable", item]
+    for item in v["--exclude-sce-module"] or []:
+        args += ["--exclude-sce-module", item]
+    if not v["audit"]:
+        args.append("--no-audit")
+    if not v["backup"]:
+        args.append("--no-backup-output")
+    if not v["update"]:
+        args.append("--no-update")
+    release = v.get("release") or "latest"
+    if release != "latest" and data_dir is not None:
+        args += ["--relinker", str(data_dir / f"relinker-{release}.exe"),
+                 "--prx-package", str(data_dir / f"prx-windows-{release}")]
+    for name, value in sorted(env.items()):
+        args += ["--env", f"{name}={value}"]
+    return args
+
+
+def parse_value(setting: Setting, text: str) -> object:
+    """A command-line string as the value type of a setting."""
+    if setting.kind == "bool":
+        low = text.strip().lower()
+        if low in ("1", "true", "on", "yes"):
+            return True
+        if low in ("0", "false", "off", "no"):
+            return False
+        raise ValueError(f"{setting.key}: expected on/off, got {text!r}")
+    if setting.kind == "list":
+        return [part for part in text.split(";") if part]
+    if setting.kind == "choice":
+        values = [value for value, _ in setting.choices]
+        if setting.key != "release" and text not in values:
+            raise ValueError(f"{setting.key}: expected one of {', '.join(values)}, got {text!r}")
+    if setting.kind == "int":
+        int(text, 0)
+    return text
+
+
+def find_setting(key: str) -> Setting | None:
+    for setting in BUILD_SETTINGS + RUNTIME_SETTINGS + INPUT_SETTINGS:
+        if setting.key == key or setting.key.lstrip("-") == key.lstrip("-"):
+            return setting
+    return None
 
 
 GAME_LOG = "anyps5_run.log"

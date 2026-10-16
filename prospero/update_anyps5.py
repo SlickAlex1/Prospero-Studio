@@ -41,7 +41,10 @@ from pathlib import Path
 REPO = "boykopovar/AnyPS5"
 API = f"https://api.github.com/repos/{REPO}"
 SOURCE_ZIP = f"https://codeload.github.com/{REPO}/zip/{{sha}}"
-TOOL_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paths  # noqa: E402
+
+TOOL_DIR = paths.ensure()  # runtime/: everything this module downloads lives here
 STATE_FILE = TOOL_DIR / "anyps5_update_state.json"
 SOURCE_DIR = TOOL_DIR / "AnyPS5-main"
 # Scripts anyps5_folder.py runs from tools/.
@@ -205,13 +208,22 @@ def update_converter(state: dict, force: bool) -> bool:
     return True
 
 
+def installed_releases() -> list[str]:
+    """Release tags with both relinker-<tag>.exe and prx-windows-<tag>/libs, newest first."""
+    tags = {m.group(1) for p in TOOL_DIR.iterdir()
+            if (m := re.fullmatch(r"prx-windows-(v\d+(?:\.\d+)*)", p.name)) and (p / "libs").is_dir()
+            and (TOOL_DIR / f"relinker-{m.group(1)}.exe").is_file()}
+    return sorted(tags, key=version_key, reverse=True)
+
+
 def prune_releases(keep_tag: str) -> None:
-    """Keep the newest KEEP_RELEASES relinker/library pairs, never the active one."""
+    """Keep the newest KEEP_RELEASES relinker/library pairs, the active one and pinned ones."""
+    pinned = set(load_state().get("pinned", []))
     tags = sorted({m.group(1) for p in TOOL_DIR.iterdir()
-                   if (m := re.fullmatch(r"(?:relinker-|prx-windows-)(v[\d.]+)(?:\.exe)?", p.name))},
+                   if (m := re.fullmatch(r"(?:relinker-|prx-windows-)(v\d+(?:\.\d+)*)(?:\.exe)?", p.name))},
                   key=version_key, reverse=True)
     for tag in tags[KEEP_RELEASES:]:
-        if tag == keep_tag:
+        if tag == keep_tag or tag in pinned:
             continue
         for path in (TOOL_DIR / f"relinker-{tag}.exe", TOOL_DIR / f"prx-windows-{tag}"):
             try:
@@ -222,7 +234,33 @@ def prune_releases(keep_tag: str) -> None:
 
 
 def update_release(state: dict, force: bool) -> bool:
-    release = get_json(f"{API}/releases/latest")
+    return _install_release(get_json(f"{API}/releases/latest"), state, force, latest=True)
+
+
+def list_releases() -> list[tuple[str, str]]:
+    """(tag, publish date) of AnyPS5 releases that ship Windows binaries, newest first."""
+    releases = get_json(f"{API}/releases?per_page=50")
+    result = []
+    for release in releases if isinstance(releases, list) else []:
+        tag = release.get("tag_name", "")
+        names = {a.get("name") for a in release.get("assets", [])}
+        if f"relinker-{tag}.exe" in names and f"prx-windows-{tag}.zip" in names:
+            result.append((tag, (release.get("published_at") or "")[:10]))
+    return result
+
+
+def install_release(tag: str, force: bool = False) -> bool:
+    """Install a specific release (e.g. an older one to compare against) and pin it."""
+    state = load_state()
+    release = get_json(f"{API}/releases/tags/{tag}")
+    changed = _install_release(release, state, force, latest=False)
+    state = load_state()
+    state["pinned"] = sorted(set(state.get("pinned", [])) | {tag}, key=version_key)
+    save_state(state)
+    return changed
+
+
+def _install_release(release: dict, state: dict, force: bool, latest: bool) -> bool:
     tag = release["tag_name"]
     assets = {asset["name"]: asset for asset in release.get("assets", [])}
     relinker_name, package_name = f"relinker-{tag}.exe", f"prx-windows-{tag}.zip"
@@ -230,8 +268,9 @@ def update_release(state: dict, force: bool) -> bool:
         raise UpdateError(f"release {tag} has no {relinker_name} / {package_name}")
     relinker = TOOL_DIR / relinker_name
     package = TOOL_DIR / f"prx-windows-{tag}"
-    if not force and state.get("release_tag") == tag and relinker.is_file() and (package / "libs").is_dir():
-        log(f"release: up to date ({tag}, published {release.get('published_at')})")
+    if not force and relinker.is_file() and (package / "libs").is_dir() and (
+            not latest or state.get("release_tag") == tag):
+        log(f"release: {'up to date' if latest else 'installed'} ({tag}, published {release.get('published_at')})")
         return False
 
     def digest(asset: dict) -> str | None:
@@ -244,8 +283,9 @@ def update_release(state: dict, force: bool) -> bool:
     if not force and expected and relinker.is_file() and (package / "libs").is_dir():
         try:
             if hashlib.sha256(relinker.read_bytes()).hexdigest() == expected.lower():
-                state.update(release_tag=tag, release_published=release.get("published_at"))
-                save_state(state)
+                if latest:
+                    state.update(release_tag=tag, release_published=release.get("published_at"))
+                    save_state(state)
                 log(f"release: {tag} already installed (relinker checksum verified)")
                 return False
         except OSError:
@@ -276,11 +316,12 @@ def update_release(state: dict, force: bool) -> bool:
             stream.read(2)
     except OSError as exc:
         raise UpdateError(f"{relinker_name} was downloaded but is now missing or locked ({exc}). Your antivirus "
-                          f"probably quarantined it; restore it and add an exception for {TOOL_DIR}") from exc
-    state.update(release_tag=tag, release_published=release.get("published_at"))
-    save_state(state)
+                          f"probably quarantined it; restore it and add an exception for {paths.ROOT}") from exc
+    if latest:
+        state.update(release_tag=tag, release_published=release.get("published_at"))
+        save_state(state)
     log(f"release: {relinker_name} and {package.name}/ installed")
-    prune_releases(tag)
+    prune_releases(state.get("release_tag") or tag)
     return True
 
 
@@ -306,7 +347,21 @@ def main() -> int:
     parser.add_argument("--source-only", action="store_true", help="only update AnyPS5-main/, tools/ and self_to_elf.py")
     parser.add_argument("--release-only", action="store_true", help="only update the relinker and PRX libraries")
     parser.add_argument("--force", action="store_true", help="download again even when already up to date")
+    parser.add_argument("--install", metavar="TAG", help="install a specific AnyPS5 release (e.g. v0.1.1) and keep it")
+    parser.add_argument("--list", action="store_true", help="list AnyPS5 releases with Windows binaries")
     args = parser.parse_args()
+    try:
+        if args.list:
+            installed = set(installed_releases())
+            for tag, date in list_releases():
+                log(f"{tag}  {date}" + ("  (installed)" if tag in installed else ""))
+            return 0
+        if args.install:
+            install_release(args.install, args.force)
+            return 0
+    except (UpdateError, OSError, zipfile.BadZipFile, KeyError) as exc:
+        log(f"ERROR: {exc}")
+        return 1
     ok = run(source=not args.release_only, release=not args.source_only, force=args.force)
     return 0 if ok else 1
 
