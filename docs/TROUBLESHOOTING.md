@@ -57,10 +57,54 @@ seconds. This message comes from the game itself (Unity) and means no frames are
    starts. The game then prints every thread's stack and stops: include that output in an
    [AnyPS5 issue](https://github.com/boykopovar/AnyPS5/issues).
 
+## `subgroup capability 61 is unsupported for shader stage 128`
+
+Also: `device does not support VK_EXT_mesh_shader`, or the start-up line
+`Vulkan features ... mesh=0`.
+
+**Cause.** The game uses the PS5's NGG/primitive-shader geometry, which AnyPS5 runs as Vulkan **mesh shaders**
+(stage 128 is the mesh stage, capability 61 is basic subgroup operations). The selected GPU has no mesh
+shader support, so AnyPS5 stops. There is no fallback for these games; no setting or rebuild changes it.
+
+**GPUs with mesh shaders:** NVIDIA GTX 16xx and RTX 20 series or newer, AMD RX 6000 series (RDNA 2) or newer,
+Intel Arc. GPUs without them, e.g. NVIDIA GTX 10xx (Pascal) and older, Intel HD/UHD integrated graphics,
+can still run games that do not use this kind of geometry (in testing: Animal Well and Blue Prince ran on a
+GTX 1050 Ti, Stray did not).
+
+If your PC has two GPUs and the wrong one is selected, set **GPU (part of its name)** (`ANYPS5_GPU`).
+
+## The game runs slowly although the GPU is not fully used
+
+The frame rate is shown in the game window's title (`FPS: ...`).
+
+1. **Log output.** AnyPS5 writes and flushes a log line for many events. In a console window every flush is
+   slow and holds the game back. Keep *Runtime settings -> Game log output* on **Log file** (the default;
+   the log goes to `anyps5_run.log` in the build folder). Measured with Animal Well: 17.8 -> 18.6 FPS
+   average, with fewer dips.
+2. **CPU-bound GPU emulation.** On a PS5 the CPU and GPU share memory. On a PC, AnyPS5's GPU driver
+   (`libSceAgcDriver.prx`) has to find what the game changed and hand it to the GPU, and translate the PS5's
+   GPU commands to Vulkan, largely on one CPU thread. With an older CPU this caps the frame rate while the GPU
+   waits. Measured with Animal Well on an i7-6700 + GTX 1050 Ti: ~19 FPS in every present mode, the
+   game process using one CPU core's worth of time spread over three threads that take turns
+   (AGC driver ~54%, game main loop ~21%, video output ~13%), the busiest thread inside
+   `GuestArenaCollectWrites`.
+   No setting changes this. What helps: a CPU with faster single cores, and newer AnyPS5 releases, which
+   Prospero Studio installs automatically when they are published.
+3. *Present mode* (`ANYPS5_PRESENT_MODE`) did not change the frame rate in that test (fifo 19.0,
+   mailbox 18.0, immediate 18.8 FPS); leave it at `fifo`.
+
 ## A setting is greyed out
 
 The installed AnyPS5 release does not contain it yet; it exists only in newer source. Click
 **Check for updates now**; it becomes available once AnyPS5 publishes a release that includes it.
+
+## `FAIL: Ambiguous guest dependency name: <module>.prx`
+
+The dump contains a second copy of a module in the same folder, usually a backup left by the dumping or
+conversion tool (`libSceFace.prx.esbak` beside `libSceFace.prx`). The relinker reads every file in
+`sce_module`, sees two modules with the same name and stops. Prospero Studio skips files whose extension
+ends in `bak` (`.bak`, `.prxbak`, `.binbak`, `.esbak` ...) when copying the game; if you still see the error,
+look for another duplicate of the named module in the game's module folders and leave only one.
 
 ## `Skipping SELF container` in the relinker output
 

@@ -233,7 +233,7 @@ class App:
         ttk.Label(status, textvariable=self.status_var, foreground=GREY).pack(side="left")
         ttk.Button(status, text="Check for updates now", command=self.run_update).pack(side="right")
 
-    def _settings_tab(self, title: str, settings: list[cat.Setting], intro: str) -> ScrollFrame:
+    def _settings_tab(self, title: str, settings: list[cat.Setting], intro: str, start_row: int = 1) -> ScrollFrame:
         tab = ScrollFrame(self.tabs)
         self.tabs.add(tab, text=title)
         ttk.Label(tab.body, text=intro, foreground=GREY, wraplength=900, justify="left").grid(
@@ -242,7 +242,7 @@ class App:
         groups: dict[str, list[cat.Setting]] = {}
         for s in settings:
             groups.setdefault(s.group, []).append(s)
-        row = 1
+        row = start_row
         for group, members in groups.items():
             box = ttk.LabelFrame(tab.body, text=group, padding=(10, 4))
             box.grid(row=row, column=0, sticky="ew", pady=6)
@@ -261,17 +261,13 @@ class App:
         self._settings_tab("Runtime settings", cat.RUNTIME_SETTINGS,
                            "Settings the AnyPS5 libraries read when the game starts (environment variables). They "
                            "are used by Play and written to play.bat in the build folder, so no rebuild is needed.")
-        input_tab = self._settings_tab("Controller & mouse", cat.INPUT_SETTINGS,
-                                       "Written to anyps5-input.ini beside eboot.exe when you Build or Play. Controllers "
-                                       "(Xbox/PlayStation) work automatically; the built-in keyboard/mouse mapping is "
-                                       "used when nothing here changes.")
-        box = ttk.LabelFrame(input_tab.body, text="Keyboard / mouse bindings", padding=(10, 4))
-        box.grid(row=99, column=0, sticky="ew", pady=6)
-        ttk.Label(box, text=cat.INPUT_HELP, foreground=GREY, wraplength=860, justify="left").pack(anchor="w")
-        self.bindings = tk.Text(box, height=8, font=("Consolas", 9))
-        self.bindings.pack(fill="x", pady=4)
-        ttk.Label(box, text="Example:  Cross = KEY:Space     Square = MOUSE:Left     ToggleMouse = MOUSE:Middle",
-                  foreground=GREEN).pack(anchor="w")
+        input_tab = self._settings_tab(
+            "Controller & mouse", cat.INPUT_SETTINGS,
+            "A controller (Xbox or PlayStation) works automatically, no setup needed. Without one, the game is played "
+            "with keyboard and mouse using the layout below. Keys only reach the game while its window is active: "
+            "click the game window first. Your changes are written to anyps5-input.ini beside eboot.exe when you "
+            "Build or Play.", start_row=2)
+        self._build_bindings(input_tab.body)
         self._build_dev_tab()
         log_tab = ttk.Frame(self.tabs)
         self.tabs.add(log_tab, text="Log")
@@ -283,6 +279,116 @@ class App:
         xs.pack(side="bottom", fill="x")
         self.log.pack(fill="both", expand=True)
         self.log_tab = log_tab
+
+    def _build_bindings(self, parent):
+        self.custom_bindings: dict[str, list[str]] = {}
+        self.default_binds = cat.default_bindings(self._detect().get("repo"))
+        box = ttk.LabelFrame(parent, text="Keyboard and mouse layout", padding=(10, 6))
+        box.grid(row=1, column=0, sticky="ew", pady=6)
+        missing = [a for a in cat.INPUT_ACTIONS if a in cat.BUTTON_ACTIONS
+                   and not any(s.startswith("KEY:") for s in self.default_binds.get(a, []))]
+        hint = ("Click Set... and press a key or mouse button to change one. Add... keeps the current keys and adds "
+                "another. Default undoes your change.")
+        if missing:
+            hint += ("\nNote: by default " + ", ".join(sorted(missing)) + " ha" + ("s" if len(missing) == 1 else "ve")
+                     + " no keyboard key (only a mouse button or nothing); give them a key if the game needs them.")
+        ttk.Label(box, text=hint, foreground=GREY, wraplength=900, justify="left").grid(
+            row=0, column=0, columnspan=6, sticky="w", pady=(0, 6))
+        for column, title in enumerate(("PS button", "AnyPS5 default", "Your keys")):
+            ttk.Label(box, text=title, font=("Segoe UI", 9, "bold")).grid(row=1, column=column, sticky="w", padx=(0, 18))
+        self.binding_labels: dict[str, ttk.Label] = {}
+        for row, action in enumerate(cat.INPUT_ACTIONS, start=2):
+            ttk.Label(box, text=cat.ACTION_LABELS[action]).grid(row=row, column=0, sticky="w", padx=(0, 18), pady=1)
+            ttk.Label(box, text=cat.describe_sources(self.default_binds.get(action, [])), foreground=GREY).grid(
+                row=row, column=1, sticky="w", padx=(0, 18))
+            label = ttk.Label(box, text="")
+            label.grid(row=row, column=2, sticky="w", padx=(0, 18))
+            self.binding_labels[action] = label
+            ttk.Button(box, text="Set...", width=7, command=lambda a=action: self._capture(a, add=False)).grid(row=row, column=3)
+            ttk.Button(box, text="Add...", width=7, command=lambda a=action: self._capture(a, add=True)).grid(row=row, column=4, padx=4)
+            ttk.Button(box, text="Default", width=8, command=lambda a=action: self._reset_binding(a)).grid(row=row, column=5)
+        self.binding_note = ttk.Label(box, text="", foreground=RED, wraplength=900, justify="left")
+        self.binding_note.grid(row=len(cat.INPUT_ACTIONS) + 2, column=0, columnspan=6, sticky="w", pady=(6, 0))
+
+    def _effective(self, action: str) -> list[str]:
+        return self.custom_bindings.get(action, self.default_binds.get(action, []))
+
+    def _refresh_bindings(self):
+        for action, label in self.binding_labels.items():
+            if action in self.custom_bindings:
+                label.configure(text=cat.describe_sources(self.custom_bindings[action]), foreground="#0b57d0",
+                                font=("Segoe UI", 9, "bold"))
+            else:
+                label.configure(text="same as default", foreground=GREY, font=("Segoe UI", 9))
+        used: dict[str, list[str]] = {}
+        for action in cat.INPUT_ACTIONS:
+            for source in self._effective(action):
+                used.setdefault(source.upper(), []).append(cat.ACTION_LABELS[action].replace("  ", " "))
+        clashes = [f"{cat.describe_source(src)}: {', '.join(names)}" for src, names in used.items() if len(names) > 1]
+        self.binding_note.configure(text=("The same key does several things: " + "; ".join(clashes)) if clashes else "")
+
+    def _reset_binding(self, action: str):
+        self.custom_bindings.pop(action, None)
+        self._refresh_bindings()
+
+    def _capture(self, action: str, add: bool):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Press a key")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        name = cat.ACTION_LABELS[action].replace("  ", " ")
+        ttk.Label(dialog, text=f"{'Add a key for' if add else 'New key for'}  {name}", font=("Segoe UI", 11, "bold"),
+                  padding=(16, 12, 16, 4)).pack()
+        ttk.Label(dialog, text="Press a key on the keyboard, or click / scroll inside the box below.",
+                  foreground=GREY, padding=(16, 0)).pack()
+        zone = tk.Label(dialog, text="click a mouse button here\n(or scroll the wheel)", width=36, height=4,
+                        relief="groove", background="#eef3fb")
+        zone.pack(padx=16, pady=10)
+        status = ttk.Label(dialog, text="", foreground=RED, padding=(16, 0))
+        status.pack()
+        ttk.Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=(4, 12))
+
+        def accept(source: str):
+            kind = source.split(":", 1)[0]
+            if action == "ToggleFullscreen" and kind != "KEY":
+                status.configure(text="Fullscreen can only use a keyboard key.")
+                return
+            if kind == "WHEEL" and action not in cat.BUTTON_ACTIONS:
+                status.configure(text="The mouse wheel can only be used for buttons, not sticks or toggles.")
+                return
+            current = list(self._effective(action)) if add else []
+            if source.upper() not in (s.upper() for s in current):
+                current.append(source)
+            self.custom_bindings[action] = current
+            self._refresh_bindings()
+            dialog.destroy()
+
+        def on_key(event):
+            key = cat.sdl_key_name(event.keysym)
+            if key is None:
+                status.configure(text=f"The key '{event.keysym}' can't be used; try another.")
+                return "break"
+            accept(f"KEY:{key}")
+            return "break"
+
+        def on_button(event):
+            button = {1: "Left", 2: "Middle", 3: "Right", 4: "X1", 5: "X2"}.get(event.num)
+            if button:
+                accept(f"MOUSE:{button}")
+
+        def on_wheel(event):
+            accept("WHEEL:Up" if event.delta > 0 else "WHEEL:Down")
+            return "break"  # do not also scroll the settings page behind the dialog
+
+        dialog.bind("<KeyPress>", on_key)
+        zone.bind("<ButtonPress>", on_button)
+        zone.bind("<MouseWheel>", on_wheel)
+        dialog.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - dialog.winfo_height()) // 3
+        dialog.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        dialog.grab_set()
+        dialog.focus_force()
 
     def _build_dev_tab(self):
         tab = ttk.Frame(self.tabs, padding=8)
@@ -354,15 +460,17 @@ class App:
         profile = self.profiles.get("games", {}).get(self._game_key()) or self.profiles.get("defaults") or {}
         for key, row in self.rows.items():
             row.set(profile.get("settings", {}).get(key, row.setting.recommended))
-        self.bindings.delete("1.0", "end")
-        self.bindings.insert("1.0", profile.get("bindings", ""))
+        stored = profile.get("key_bindings")
+        self.custom_bindings = ({k: list(v) for k, v in stored.items() if k in cat.ACTION_LABELS}
+                                if isinstance(stored, dict) else cat.bindings_from_text(profile.get("bindings", "")))
+        self._refresh_bindings()
         self.dev_values = dict(profile.get("developer", {}))
         self.output_var.set(profile.get("output", ""))
         self._fill_dev()
 
     def _current_profile(self) -> dict:
         return {"settings": {key: row.get() for key, row in self.rows.items()},
-                "bindings": self.bindings.get("1.0", "end").strip(),
+                "key_bindings": {k: list(v) for k, v in self.custom_bindings.items()},
                 "developer": dict(self.dev_values), "output": self.output_var.get().strip()}
 
     def save_profile(self):
@@ -388,7 +496,8 @@ class App:
         for s in groups.get(title, []):
             self.rows[s.key].set(s.recommended)
         if title == "Controller & mouse":
-            self.bindings.delete("1.0", "end")
+            self.custom_bindings.clear()
+            self._refresh_bindings()
 
     # --------------------------------------------------------------- status
     def refresh_status(self):
@@ -520,6 +629,7 @@ class App:
         args.append("--to-intel" if v["--to-intel"] else "--no-to-intel")
         args += ["--unused-filter", v["--unused-filter"] or "0"]
         args += ["--converter-kind", v["--converter-kind"] or "auto"]
+        args += ["--game-output", v["game_output"] or "file"]
         if v["--rpath"]:
             args += ["--rpath", v["--rpath"]]
         for key in ("--windows-gui", "--windows-diagnostics", "--trace-imports", "--trap-sdk-syscall-stubs",
@@ -544,7 +654,7 @@ class App:
 
     def _write_input(self, output: Path):
         values = {s.key: self.rows[s.key].get() for s in cat.INPUT_SETTINGS}
-        text = cat.input_ini(values, self.bindings.get("1.0", "end"))
+        text = cat.input_ini(values, cat.bindings_text(self.custom_bindings))
         ini = output / "anyps5-input.ini"
         if text:
             ini.write_text(text, encoding="utf-8")
@@ -592,14 +702,29 @@ class App:
             return
         self.save_profile()
         env = self.runtime_env()
-        launcher = cat.write_launcher(output, env)
+        game_output = self.rows["game_output"].get() or "file"
+        launcher = cat.write_launcher(output, env, game_output)
         self._write_input(output)
-        self.write_log(f"\n=== Play: {output / 'eboot.exe'}\n"
+        where = {"file": f"log: {output / cat.GAME_LOG}", "off": "log: off",
+                 "console": "log: console window (slow)"}[game_output]
+        self.write_log(f"\n=== Play: {output / 'eboot.exe'}  ({where})\n"
                        + "".join(f"    {k}={v}\n" for k, v in sorted(env.items()))
                        + f"    (same settings saved in {launcher.name} for double-click)\n")
         try:
-            subprocess.Popen([str(output / "eboot.exe")], cwd=str(output), env={**os.environ, **env},
-                             creationflags=CREATE_NEW_CONSOLE)
+            if game_output == "console":
+                subprocess.Popen([str(output / "eboot.exe")], cwd=str(output), env={**os.environ, **env},
+                                 creationflags=CREATE_NEW_CONSOLE)
+            else:
+                # A file (or nothing) instead of a console: AnyPS5 flushes every log line, and a console
+                # window makes each flush slow enough to hold the game back.
+                sink = open(output / cat.GAME_LOG, "wb") if game_output == "file" else subprocess.DEVNULL
+                try:
+                    subprocess.Popen([str(output / "eboot.exe")], cwd=str(output), env={**os.environ, **env},
+                                     stdout=sink, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                     creationflags=NO_WINDOW)
+                finally:
+                    if sink is not subprocess.DEVNULL:
+                        sink.close()
         except OSError as exc:
             messagebox.showerror("AnyPS5", f"Could not start eboot.exe: {exc}\nIf your antivirus removed it, add an "
                                           "exception for the build folder and build again.")

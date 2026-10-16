@@ -58,6 +58,20 @@ Used when the game is converted. Changing them requires a new build. On the comm
 
 Environment variables the AnyPS5 libraries read when the game starts. The GUI applies them on **Play** and every build writes them to `play.bat`. On the command line: `--env NAME=VALUE`.
 
+### Performance
+
+| Variable | Setting | Default | Recommended | What it does |
+|---|---|---|---|---|
+| tool option | Game log output | Log file - fastest, recommended | Log file - fastest, recommended | Where AnyPS5's log goes while the game runs. AnyPS5 writes and flushes a line for many events (textures, file opens, threads ...); shown live in a console window this is slow on Windows and can hold the game back even when the GPU is not busy. A log file costs almost nothing and is kept for crash reports (anyps5_run.log in the build folder). **Use the console only to watch the log live while debugging.** |
+| `ANYPS5_SHADER_CACHE_DIR` | Shader cache folder | unset | unset | Where recompiled shaders and the Vulkan pipeline cache are kept. Default: shader_cache beside eboot.exe. Deleting it is safe. |
+| `ANYPS5_NO_SHADER_CACHE` | Disable shader cache | OFF | OFF | Disables the shader and pipeline caches; every run recompiles shaders. **Keep OFF; the cache makes later runs start and play much smoother.** |
+| `APS5_NO_PIPELINE_JOURNAL` | Disable pipeline journal | OFF | OFF | Stops recording/replaying Vulkan pipelines; replay pre-builds pipelines a previous run used so they do not stutter when first reached. |
+| `APS5_PIPELINE_JOURNAL_THREADS` | Pipeline journal replay threads | unset | unset | Threads that rebuild journaled pipelines while the game loads. Default: half the CPU threads. 0 records without replaying. |
+| `APS5_PIPELINE_JOURNAL_ENTRIES` | Pipelines replayed | unset | unset | How many journaled pipelines are replayed (the first recorded, which a run reaches first). Default: all. |
+| `APS5_PIPELINE_STORE_ENTRIES` | Resident graphics pipelines | 1024 | unset | How many graphics pipelines stay resident. |
+| `APS5_PIPELINE_JOURNAL_MAX_MIB` | Pipeline journal size limit (MiB) | 1024 | unset | The journal file size at which recording stops. |
+| `APS5_NO_PIPELINE_LTO` | Disable pipeline link-time optimisation | OFF | OFF | Builds pipelines without link-time optimisation. |
+
 ### Game
 
 | Variable | Setting | Default | Recommended | What it does |
@@ -72,19 +86,6 @@ Environment variables the AnyPS5 libraries read when the game starts. The GUI ap
 | `ANYPS5_GPU` | GPU (part of its name) | unset | unset | Runs on the Vulkan device whose name contains this text (case-insensitive). By default the first usable device is used, preferring a discrete GPU. Names are printed at start-up in the 'Physical device candidate' lines. **Leave empty; e.g. 'NVIDIA' or '1050' forces the GeForce if the Intel GPU gets picked.** |
 | `ANYPS5_PRESENT_MODE` | Present mode | fifo - vsync (default) | unset | fifo = vertical sync. fifo_latest_ready and mailbox show whole frames without making the game wait for the display. immediate presents at once and can tear. Flips stay paced at 59.94 Hz. |
 | `VK_LOADER_DRIVERS_DISABLE` | Disable Vulkan drivers | unset | unset | Vulkan driver manifest names to skip. '*dzn*' disables Mesa Dozen (from the OpenCL/OpenGL/Vulkan Compatibility Pack), which can crash some D3D12 drivers during start-up. **Set to *dzn* only if the game crashes while listing GPUs and you have another Vulkan driver.** |
-
-### Performance
-
-| Variable | Setting | Default | Recommended | What it does |
-|---|---|---|---|---|
-| `ANYPS5_SHADER_CACHE_DIR` | Shader cache folder | unset | unset | Where recompiled shaders and the Vulkan pipeline cache are kept. Default: shader_cache beside eboot.exe. Deleting it is safe. |
-| `ANYPS5_NO_SHADER_CACHE` | Disable shader cache | OFF | OFF | Disables the shader and pipeline caches; every run recompiles shaders. **Keep OFF; the cache makes later runs start and play much smoother.** |
-| `APS5_NO_PIPELINE_JOURNAL` | Disable pipeline journal | OFF | OFF | Stops recording/replaying Vulkan pipelines; replay pre-builds pipelines a previous run used so they do not stutter when first reached. |
-| `APS5_PIPELINE_JOURNAL_THREADS` | Pipeline journal replay threads | unset | unset | Threads that rebuild journaled pipelines while the game loads. Default: half the CPU threads. 0 records without replaying. |
-| `APS5_PIPELINE_JOURNAL_ENTRIES` | Pipelines replayed | unset | unset | How many journaled pipelines are replayed (the first recorded, which a run reaches first). Default: all. |
-| `APS5_PIPELINE_STORE_ENTRIES` | Resident graphics pipelines | 1024 | unset | How many graphics pipelines stay resident. |
-| `APS5_PIPELINE_JOURNAL_MAX_MIB` | Pipeline journal size limit (MiB) | 1024 | unset | The journal file size at which recording stops. |
-| `APS5_NO_PIPELINE_LTO` | Disable pipeline link-time optimisation | OFF | OFF | Builds pipelines without link-time optimisation. |
 
 ### Compatibility
 
@@ -108,7 +109,41 @@ Environment variables the AnyPS5 libraries read when the game starts. The GUI ap
 
 ## Controller and mouse
 
-Written to `anyps5-input.ini` beside `eboot.exe`. Controllers (Xbox / PlayStation layouts via SDL) work without any configuration.
+Controllers (Xbox / PlayStation layouts via SDL) work without any configuration. Without one, the game is played with this built-in keyboard and mouse layout; keys only reach the game while its window is active. Change any of them in the window (*Controller & mouse* tab: **Set...** / **Add...**), which writes `anyps5-input.ini` beside `eboot.exe`.
+
+### Default keyboard and mouse layout
+
+| PS button | Default key / mouse |
+|---|---|
+| ✕  Cross | Enter / Space |
+| ○  Circle | C |
+| △  Triangle | I |
+| □  Square | Left mouse button |
+| L1 | Q |
+| R1 | E / Left Alt / Right Alt |
+| L2 | (none) |
+| R2 | Right mouse button |
+| L3 (left stick click) | Left Shift / Right Shift |
+| R3 (right stick click) | Left Ctrl / Right Ctrl |
+| Options | Escape |
+| D-pad up | Up / Mouse wheel up |
+| D-pad right | Right |
+| D-pad down | Down / Mouse wheel down |
+| D-pad left | Left |
+| Left stick left | A |
+| Left stick right | D |
+| Left stick up | W |
+| Left stick down | S |
+| Right stick left | F |
+| Right stick right | H |
+| Right stick up | T |
+| Right stick down | G |
+| Touchpad (left half) | Backspace |
+| Touchpad (right half) | Tab |
+| Mouse as right stick on/off | Middle mouse button |
+| Fullscreen on/off | F11 |
+
+Square has only the left mouse button and L2 has nothing by default; give them keys if a game needs them.
 
 ### Controller
 
@@ -129,7 +164,7 @@ Written to `anyps5-input.ini` beside `eboot.exe`. Controllers (Xbox / PlayStatio
 | `MouseSmoothingMs` | Mouse smoothing (ms) | 10 | unset | 0-500, smoothing time constant. 0 follows every mouse report directly. |
 | `MouseDecayMs` | Mouse decay (ms) | 30 | unset | 1-1000, milliseconds without movement after which the stick is centred. |
 
-Bindings: one per line, `Action = KEY:<SDL key name>`, `MOUSE:Left|Middle|Right|X1|X2` or `WHEEL:Up|Down`. The first line for an action replaces its built-in binding; further lines add alternates. Actions: `Cross`, `Circle`, `Triangle`, `Square`, `L1`, `R1`, `L2`, `R2`, `L3`, `R3`, `Options`, `Up`, `Right`, `Down`, `Left`, `LeftStickLeft`, `LeftStickRight`, `LeftStickUp`, `LeftStickDown`, `RightStickLeft`, `RightStickRight`, `RightStickUp`, `RightStickDown`, `TouchLeft`, `TouchRight`, `ToggleMouse`, `ToggleFullscreen`.
+In `anyps5-input.ini` bindings are one per line, `Action = KEY:<SDL key name>`, `MOUSE:Left|Middle|Right|X1|X2` or `WHEEL:Up|Down`. The first line for an action replaces its built-in binding; further lines add alternates. Actions: `Cross`, `Circle`, `Triangle`, `Square`, `L1`, `R1`, `L2`, `R2`, `L3`, `R3`, `Options`, `Up`, `Right`, `Down`, `Left`, `LeftStickLeft`, `LeftStickRight`, `LeftStickUp`, `LeftStickDown`, `RightStickLeft`, `RightStickRight`, `RightStickUp`, `RightStickDown`, `TouchLeft`, `TouchRight`, `ToggleMouse`, `ToggleFullscreen`.
 
 ## Developer switches
 

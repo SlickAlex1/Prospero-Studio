@@ -138,6 +138,14 @@ LANGUAGES = (
 )
 
 RUNTIME_SETTINGS = [
+    Setting("game_output", "Game log output", "choice", "file", "file",
+            "Where AnyPS5's log goes while the game runs. AnyPS5 writes and flushes a line for many events "
+            "(textures, file opens, threads ...); shown live in a console window this is slow on Windows and can "
+            "hold the game back even when the GPU is not busy. A log file costs almost nothing and is kept for "
+            "crash reports (anyps5_run.log in the build folder).", "Performance",
+            choices=(("file", "Log file - fastest, recommended"), ("console", "Console window - live, slow"),
+                     ("off", "Off - no log")),
+            note="Use the console only to watch the log live while debugging."),
     Setting("ANYPS5_LANGUAGE", "Console language", "choice", "1", None,
             "The console language games read with sceSystemServiceParamGetInt.", "Game",
             choices=tuple((str(i), f"{i} - {name}") for i, name in enumerate(LANGUAGES))),
@@ -244,6 +252,134 @@ INPUT_HELP = ("One binding per line: Action = KEY:<SDL key name> | MOUSE:Left/Mi
               "The first line for an action replaces its built-in binding; more lines add alternates.\n"
               "Controllers always work and are not affected. Actions: " + ", ".join(INPUT_ACTIONS))
 
+# PS button labels shown in the GUI, in INPUT_ACTIONS order.
+ACTION_LABELS = {
+    "Cross": "✕  Cross", "Circle": "○  Circle", "Triangle": "△  Triangle", "Square": "□  Square",
+    "L1": "L1", "R1": "R1", "L2": "L2", "R2": "R2", "L3": "L3 (left stick click)", "R3": "R3 (right stick click)",
+    "Options": "Options", "Up": "D-pad up", "Right": "D-pad right", "Down": "D-pad down", "Left": "D-pad left",
+    "LeftStickLeft": "Left stick left", "LeftStickRight": "Left stick right", "LeftStickUp": "Left stick up",
+    "LeftStickDown": "Left stick down", "RightStickLeft": "Right stick left", "RightStickRight": "Right stick right",
+    "RightStickUp": "Right stick up", "RightStickDown": "Right stick down", "TouchLeft": "Touchpad (left half)",
+    "TouchRight": "Touchpad (right half)", "ToggleMouse": "Mouse as right stick on/off",
+    "ToggleFullscreen": "Fullscreen on/off",
+}
+# Actions that are pad buttons (the mouse wheel may only be bound to these).
+BUTTON_ACTIONS = {"Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "L3", "R3", "Options",
+                  "Up", "Right", "Down", "Left"}
+
+# Built-in bindings of AnyPS5 (core/libs/prx/libScePad/include/InputMapping.hpp), used when
+# the source tree is not available. default_bindings() reads the current ones from source.
+FALLBACK_BINDINGS = {
+    "Cross": ["KEY:Return", "KEY:Space"], "Circle": ["KEY:C"], "Triangle": ["KEY:I"], "Square": ["MOUSE:Left"],
+    "L1": ["KEY:Q"], "R1": ["KEY:E", "KEY:Left Alt", "KEY:Right Alt"], "L2": [], "R2": ["MOUSE:Right"],
+    "L3": ["KEY:Left Shift", "KEY:Right Shift"], "R3": ["KEY:Left Ctrl", "KEY:Right Ctrl"], "Options": ["KEY:Escape"],
+    "Up": ["KEY:Up", "WHEEL:Up"], "Right": ["KEY:Right"], "Down": ["KEY:Down", "WHEEL:Down"], "Left": ["KEY:Left"],
+    "LeftStickLeft": ["KEY:A"], "LeftStickRight": ["KEY:D"], "LeftStickUp": ["KEY:W"], "LeftStickDown": ["KEY:S"],
+    "RightStickLeft": ["KEY:F"], "RightStickRight": ["KEY:H"], "RightStickUp": ["KEY:T"], "RightStickDown": ["KEY:G"],
+    "TouchLeft": ["KEY:Backspace"], "TouchRight": ["KEY:Tab"], "ToggleMouse": ["MOUSE:Middle"],
+    "ToggleFullscreen": ["KEY:F11"],
+}
+# SDL scancode enum suffix -> name SDL_GetScancodeFromName accepts (letters/digits/F-keys map to themselves).
+SDL_SCANCODE_NAMES = {
+    "RETURN": "Return", "SPACE": "Space", "ESCAPE": "Escape", "BACKSPACE": "Backspace", "TAB": "Tab",
+    "LSHIFT": "Left Shift", "RSHIFT": "Right Shift", "LCTRL": "Left Ctrl", "RCTRL": "Right Ctrl",
+    "LALT": "Left Alt", "RALT": "Right Alt", "UP": "Up", "DOWN": "Down", "LEFT": "Left", "RIGHT": "Right",
+    "CAPSLOCK": "CapsLock", "DELETE": "Delete", "INSERT": "Insert", "HOME": "Home", "END": "End",
+    "PAGEUP": "PageUp", "PAGEDOWN": "PageDown", "MINUS": "-", "EQUALS": "=", "LEFTBRACKET": "[",
+    "RIGHTBRACKET": "]", "SEMICOLON": ";", "APOSTROPHE": "'", "GRAVE": "`", "COMMA": ",", "PERIOD": ".",
+    "SLASH": "/", "BACKSLASH": "\\",
+}
+_CONTROL_TO_ACTION = {"LeftStickLeft", "LeftStickRight", "LeftStickUp", "LeftStickDown", "RightStickLeft",
+                      "RightStickRight", "RightStickUp", "RightStickDown", "TouchLeft", "TouchRight",
+                      "ToggleMouse", "ToggleFullscreen"}
+_BINDING_LINE = re.compile(r"InputBinding\{SDL_SCANCODE_(\w+),\s*MouseButton::(\w+),\s*InputControl::(\w+)"
+                           r"(?:,\s*PadButton::(\w+))?(?:,\s*(-?\d+))?\}")
+
+
+def default_bindings(source_root: Path | None) -> dict[str, list[str]]:
+    """AnyPS5's built-in keyboard/mouse bindings, read from its source when available."""
+    header = source_root / "core" / "libs" / "prx" / "libScePad" / "include" / "InputMapping.hpp" if source_root else None
+    try:
+        text = header.read_text(encoding="utf-8", errors="replace") if header else ""
+    except OSError:
+        text = ""
+    found: dict[str, list[str]] = {action: [] for action in INPUT_ACTIONS}
+    count = 0
+    for scancode, mouse, control, button, wheel in _BINDING_LINE.findall(text):
+        action = button if control == "Button" else control
+        if action not in found:
+            continue
+        if wheel and wheel != "0":
+            source = "WHEEL:Up" if int(wheel) > 0 else "WHEEL:Down"
+        elif mouse != "None":
+            source = f"MOUSE:{mouse}"
+        elif scancode != "UNKNOWN":
+            source = "KEY:" + SDL_SCANCODE_NAMES.get(scancode, scancode.capitalize() if len(scancode) > 1 and
+                                                      not scancode[1:].isdigit() else scancode)
+        else:
+            continue
+        found[action].append(source)
+        count += 1
+    return found if count >= 10 else {a: list(v) for a, v in FALLBACK_BINDINGS.items()}
+
+
+def describe_source(source: str) -> str:
+    """Readable text for a binding source such as KEY:Return or MOUSE:Left."""
+    kind, _, value = source.partition(":")
+    kind = kind.upper()
+    if kind == "MOUSE":
+        return {"LEFT": "Left mouse button", "RIGHT": "Right mouse button", "MIDDLE": "Middle mouse button",
+                "X1": "Mouse back button", "X2": "Mouse forward button"}.get(value.upper(), f"Mouse {value}")
+    if kind == "WHEEL":
+        return f"Mouse wheel {value.lower()}"
+    return {"Return": "Enter"}.get(value, value)
+
+
+def describe_sources(sources: list[str]) -> str:
+    return " / ".join(describe_source(s) for s in sources) if sources else "(none)"
+
+
+# Tk keysym -> SDL key name, for capturing a key press in the GUI.
+TK_TO_SDL = {
+    "Return": "Return", "KP_Enter": "Keypad Enter", "space": "Space", "Escape": "Escape", "Tab": "Tab",
+    "BackSpace": "Backspace", "Shift_L": "Left Shift", "Shift_R": "Right Shift", "Control_L": "Left Ctrl",
+    "Control_R": "Right Ctrl", "Alt_L": "Left Alt", "Alt_R": "Right Alt", "Up": "Up", "Down": "Down",
+    "Left": "Left", "Right": "Right", "Prior": "PageUp", "Next": "PageDown", "Home": "Home", "End": "End",
+    "Insert": "Insert", "Delete": "Delete", "Caps_Lock": "CapsLock", "minus": "-", "equal": "=",
+    "bracketleft": "[", "bracketright": "]", "semicolon": ";", "apostrophe": "'", "grave": "`", "comma": ",",
+    "period": ".", "slash": "/", "backslash": "\\",
+}
+
+
+def sdl_key_name(keysym: str) -> str | None:
+    if keysym in TK_TO_SDL:
+        return TK_TO_SDL[keysym]
+    if len(keysym) == 1 and keysym.isalnum():
+        return keysym.upper()
+    if re.fullmatch(r"F\d{1,2}", keysym):
+        return keysym
+    if re.fullmatch(r"KP_\d", keysym):
+        return "Keypad " + keysym[3:]
+    return None
+
+
+def bindings_from_text(text: str) -> dict[str, list[str]]:
+    """Parse 'Action = TYPE:Value' lines (older GUI profiles) into a dict."""
+    result: dict[str, list[str]] = {}
+    names = {a.upper(): a for a in INPUT_ACTIONS}
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].split(";", 1)[0].strip()
+        name, sep, source = line.partition("=")
+        action = names.get(name.strip().upper())
+        if sep and action and ":" in source:
+            result.setdefault(action, []).append(source.strip())
+    return result
+
+
+def bindings_text(bindings: dict[str, list[str]]) -> str:
+    return "\n".join(f"{action} = {source}" for action in INPUT_ACTIONS for source in bindings.get(action, []))
+
+
 KNOWN_ENV = {s.key for s in RUNTIME_SETTINGS} | {"ANYPS5_INPUT_CONFIG"}
 ENV_PATTERN = re.compile(rb'"((?:ANYPS5|APS5)_[A-Z0-9_]{2,})"')
 
@@ -297,8 +433,8 @@ def installed_support(libs_dir: Path | None, relinker: Path | None, env_names: l
     else:
         support = {name: True for name in env_names}
     for name in env_names:
-        if name.startswith("VK_"):
-            support[name] = True  # read by the Vulkan loader, not by AnyPS5
+        if not name.startswith(("ANYPS5_", "APS5_")):
+            support[name] = True  # VK_* is read by the Vulkan loader; other keys are tool options
     relinker_data = b""
     if relinker:
         try:
@@ -330,8 +466,8 @@ def env_for(values: dict[str, object]) -> dict[str, str]:
     env: dict[str, str] = {}
     kinds = {s.key: s.kind for s in RUNTIME_SETTINGS}
     for name, value in values.items():
-        if value in (None, "", False):
-            continue
+        if value in (None, "", False) or not name.startswith(("ANYPS5_", "APS5_", "VK_")):
+            continue  # unset, or a tool option such as game_output (not an environment variable)
         env[name] = "1" if (kinds.get(name) == "bool" or value is True) else str(value)
     return env
 
@@ -350,12 +486,25 @@ def input_ini(values: dict[str, object], bindings: str) -> str:
     return "# Written by Prospero Studio\n" + "\n".join(lines + binding_lines) + "\n"
 
 
-def write_launcher(output: Path, env: dict[str, str]) -> Path:
-    """Write play.bat that starts eboot.exe with these runtime settings."""
+GAME_LOG = "anyps5_run.log"
+
+
+def write_launcher(output: Path, env: dict[str, str], game_output: str = "file") -> Path:
+    """Write play.bat that starts eboot.exe with these runtime settings.
+
+    game_output: "file" sends AnyPS5's log to anyps5_run.log (fast), "off" discards it,
+    "console" shows it live in the window (slow: every line is flushed to the console).
+    """
     lines = ["@echo off", "rem Written by Prospero Studio. Starts the game with its runtime settings.",
              'cd /d "%~dp0"']
     lines += [f'set "{name}={value}"' for name, value in sorted(env.items())]
-    lines += ["eboot.exe", "echo.", "echo Game exited with code %ERRORLEVEL%.", "pause"]
+    if game_output == "console":
+        lines += ["eboot.exe"]
+    elif game_output == "off":
+        lines += ["echo Starting the game...", "eboot.exe > nul 2>&1"]
+    else:
+        lines += [f"echo Starting the game; its log is written to {GAME_LOG}", f"eboot.exe > {GAME_LOG} 2>&1"]
+    lines += ["echo.", "echo Game exited with code %ERRORLEVEL%.", "pause"]
     launcher = output / "play.bat"
     launcher.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8", newline="")
     (output / "anyps5_runtime.json").write_text(json.dumps(env, indent=2), encoding="utf-8")

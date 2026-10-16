@@ -53,6 +53,7 @@ def table(settings: list[cat.Setting], key_title: str) -> list[str]:
 
 
 def main() -> int:
+    defaults = cat.default_bindings(ROOT / "AnyPS5-main")
     out = [
         "# Settings reference",
         "",
@@ -78,13 +79,24 @@ def main() -> int:
         *table(cat.RUNTIME_SETTINGS, "Variable"),
         "## Controller and mouse",
         "",
-        "Written to `anyps5-input.ini` beside `eboot.exe`. Controllers (Xbox / PlayStation layouts via SDL) "
-        "work without any configuration.",
+        "Controllers (Xbox / PlayStation layouts via SDL) work without any configuration. Without one, the "
+        "game is played with this built-in keyboard and mouse layout; keys only reach the game while its window "
+        "is active. Change any of them in the window (*Controller & mouse* tab: **Set...** / **Add...**), "
+        "which writes `anyps5-input.ini` beside `eboot.exe`.",
+        "",
+        "### Default keyboard and mouse layout",
+        "",
+        "| PS button | Default key / mouse |",
+        "|---|---|",
+        *[f"| {cell(cat.ACTION_LABELS[a])} | {cell(cat.describe_sources(defaults[a]))} |" for a in cat.INPUT_ACTIONS],
+        "",
+        "Square has only the left mouse button and L2 has nothing by default; give them keys if a game needs "
+        "them.",
         "",
         *table(cat.INPUT_SETTINGS, "Key"),
-        "Bindings: one per line, `Action = KEY:<SDL key name>`, `MOUSE:Left|Middle|Right|X1|X2` or "
-        "`WHEEL:Up|Down`. The first line for an action replaces its built-in binding; further lines add "
-        "alternates. Actions: " + ", ".join(f"`{a}`" for a in cat.INPUT_ACTIONS) + ".",
+        "In `anyps5-input.ini` bindings are one per line, `Action = KEY:<SDL key name>`, "
+        "`MOUSE:Left|Middle|Right|X1|X2` or `WHEEL:Up|Down`. The first line for an action replaces its built-in "
+        "binding; further lines add alternates. Actions: " + ", ".join(f"`{a}`" for a in cat.INPUT_ACTIONS) + ".",
         "",
         "## Developer switches",
         "",

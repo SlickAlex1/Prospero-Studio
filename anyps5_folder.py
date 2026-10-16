@@ -72,11 +72,22 @@ def is_self(path: Path) -> bool:
         return False
 
 
+def is_backup_name(low: str) -> bool:
+    """Backup copies dump/convert tools leave beside the originals.
+
+    *.bak, *.prxbak, *.binbak (self_to_elf.py), *.esbak (seen in dumps) and similar:
+    an extension ending in "bak". Copied into app0 they would be read as a second
+    module with the same name and the relinker fails ("Ambiguous guest dependency").
+    """
+    extension = low.rsplit(".", 1)[-1] if "." in low else ""
+    return (extension.endswith("bak") and len(extension) <= 8) or ".bak_" in low or ".backup_" in low
+
+
 def is_ignored(name: str) -> bool:
     low = name.lower()
     return (low in {n.lower() for n in IGNORE_NAMES}
             or low.endswith(tuple(s.lower() for s in IGNORE_SUFFIXES))
-            or ".bak_" in low or ".backup_" in low)
+            or is_backup_name(low))
 
 
 def copy_ignore(_directory: str, names: list[str]) -> set[str]:
@@ -420,6 +431,9 @@ def main() -> int:
     parser.add_argument("--windows-fixed-base", metavar="ADDRESS", help="Map the executable at this fixed address (e.g. 0x400000); only for titles that need it")
     parser.add_argument("--executable", action="append", default=[], metavar="PATH", help="Also convert another executable of the title, relative to app0 (e.g. picker/picker.bin)")
     parser.add_argument("--env", action="append", default=[], metavar="NAME=VALUE", help="Runtime setting for the game (written to play.bat and used by --launch); repeatable")
+    parser.add_argument("--game-output", choices=("file", "console", "off"), default="file",
+                        help="Where the game's log goes when launched: file (anyps5_run.log, fastest; default), "
+                             "console (live but slow: AnyPS5 flushes every line) or off")
     parser.add_argument("--no-audit", action="store_true", help="Skip import audit")
     parser.add_argument("--strict-audit", action="store_true", help="Return failure if the import audit reports missing/absent imports")
     launch = parser.add_mutually_exclusive_group()
@@ -598,7 +612,7 @@ def main() -> int:
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
             import anyps5_settings
-            launcher = anyps5_settings.write_launcher(output, runtime_env)
+            launcher = anyps5_settings.write_launcher(output, runtime_env, args.game_output)
             log.write("Launcher with runtime settings: " + str(launcher)
                       + ("" if runtime_env else " (no runtime settings)"))
             for name, value in sorted(runtime_env.items()):
@@ -614,7 +628,16 @@ def main() -> int:
         log.write("A successful build does not guarantee runtime compatibility; absent imports/stubs may still stop the game.")
         if args.launch:
             log.write("\nLaunching eboot.exe...")
-            process = subprocess.Popen([str(executable)], cwd=str(output), env={**os.environ, **runtime_env})
+            if args.game_output == "console":
+                process = subprocess.Popen([str(executable)], cwd=str(output), env={**os.environ, **runtime_env})
+            else:
+                # AnyPS5 flushes every log line; a console makes that slow enough to hold the game back.
+                game_log = output / "anyps5_run.log"
+                with open(game_log, "wb") if args.game_output == "file" else open(os.devnull, "wb") as sink:
+                    process = subprocess.Popen([str(executable)], cwd=str(output), env={**os.environ, **runtime_env},
+                                               stdout=sink, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                if args.game_output == "file":
+                    log.write(f"Game log: {game_log}")
             log.write(f"Launched process PID: {process.pid}")
         else:
             log.write("Not launching (--no-launch).")

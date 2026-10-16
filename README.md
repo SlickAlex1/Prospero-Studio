@@ -67,7 +67,7 @@ Before each build the tool checks every upstream project and downloads only what
 | OS | Windows 10 or 11, 64-bit |
 | Python | 3.10 or newer from [python.org](https://www.python.org/downloads/) (Tkinter is included) |
 | CPU | x86-64 with AVX2, FMA, F16C, BMI1/2, LZCNT and MOVBE (Intel Haswell / AMD Zen or newer) |
-| GPU | Vulkan 1.1 with graphics, compute and presentation |
+| GPU | Vulkan 1.1 with graphics, compute and presentation. **Many games also need mesh shaders** (`VK_EXT_mesh_shader`): NVIDIA GTX 16xx / RTX 20 series or newer, AMD RX 6000 series or newer, Intel Arc. Older GPUs (e.g. GTX 10xx, Intel HD/UHD) run only games that don't, see [Troubleshooting](docs/TROUBLESHOOTING.md#subgroup-capability-61-is-unsupported-for-shader-stage-128) |
 | Games | A PS5 game folder **you dumped from your own console**, already **decrypted** (this tool cannot decrypt) |
 | Disk | About 100 MB for AnyPS5, plus a copy of each game you build |
 
